@@ -56,5 +56,5 @@ jobs:
       - name: Upload wheels to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.whl
+          files: dist/nvdiffrast-*.whl
           generate_release_notes: true
