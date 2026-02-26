@@ -10,13 +10,22 @@ permissions:
 
 jobs:
   build-wheels:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-2022]
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Build wheel inside CUDA container
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ---- Linux build (your existing docker approach) ----
+      - name: Build wheel (Linux, CUDA in container)
+        if: runner.os == 'Linux'
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -31,18 +40,53 @@ jobs:
               apt-get update
               apt-get install -y --no-install-recommends python3 python3-pip python3-dev git build-essential ninja-build
               python3 -m pip install -U pip setuptools wheel build
-
-              # Match your runtime torch (cu124)
               python3 -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
-
-              # Build the wheel
               python3 -m pip wheel . -w dist --no-build-isolation -v
-
               ls -lah dist
             '
+
+      # ---- Windows build (native) ----
+      - name: Install CUDA Toolkit (Windows)
+        if: runner.os == 'Windows'
+        uses: Jimver/cuda-toolkit@v0.2.30
+        with:
+          cuda: "12.4.1"
+
+      - name: MSVC dev environment (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          python -m pip install -U pip setuptools wheel build ninja
+          python -m pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+          $env:TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0+PTX"
+          python -m pip wheel . -w dist --no-build-isolation -v
+          dir dist
+
+      # Upload per-OS wheel(s) as artifacts
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: dist/*.whl
+
+  release:
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
 
       - name: Upload wheels to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/nvdiffrast-*.whl
+          files: dist/*.whl
           generate_release_notes: true
