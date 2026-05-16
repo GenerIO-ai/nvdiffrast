@@ -1,28 +1,28 @@
-# Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
-#
-# NVIDIA CORPORATION and its licensors retain all intellectual property
-# and proprietary rights in and to this software, related documentation
-# and any modifications thereto.  Any use, reproduction, disclosure or
-# distribution of this software and related documentation without an express
-# license agreement from NVIDIA CORPORATION is strictly prohibited.
+# Copyright (c) 2020, NVIDIA CORPORATION. All rights reserved.
 
-import setuptools
 import os
 
-# Print an error message if there's no PyTorch installed.
+import setuptools
+
 try:
     from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 except ImportError:
-    # This happens if the user runs 'pip install' with default build isolation
-    # OR if they simply don't have torch installed at all.
     print("\n\n" + "*" * 70)
     print("ERROR! Cannot compile nvdiffrast CUDA extension. Please ensure that:\n")
     print("1. You have PyTorch installed")
     print("2. You run 'pip install' with --no-build-isolation flag")
     print("*" * 70 + "\n\n")
-    exit(1)
+    raise SystemExit(1)
+
 
 setuptools.setup(
+    name="nvdiffrast",
+    version="0.4.0",
+    packages=setuptools.find_packages(
+        include=["nvdiffrast", "nvdiffrast.torch"],
+        exclude=["nvdiffrast.common*"],
+    ),
+    install_requires=["numpy"],
     ext_modules=[
         CUDAExtension(
             "_nvdiffrast_c",
@@ -45,7 +45,6 @@ setuptools.setup(
             ],
             extra_compile_args={
                 "cxx": ["-DNVDR_TORCH"]
-                # Disable warnings in torch headers.
                 + (["/wd4067", "/wd4624", "/wd4996"] if os.name == "nt" else []),
                 "nvcc": ["-DNVDR_TORCH", "-lineinfo"],
             },
